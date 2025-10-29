@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AlphaC</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #007bff; color: white; padding: 20px;">
+            <h1 style="margin: 0;">AlphaC</h1>
+            <div>
+                <span>Welcome, {{ username }}!</span>
+                <a href="/logout" style="color: white; margin-left: 10px;">Logout</a>
+            </div>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="image-preview" style="display: none; padding: 15px; background: white; border-top: 1px solid #e2e8f0;">
+            <img id="preview-img" style="max-width: 150px; border-radius: 8px; margin-bottom: 10px;">
+            <div style="display: flex; gap: 10px;">
+                <button onclick="cancelImage()" style="background: #ef4444;">Cancel</button>
+                <button onclick="sendImageWithPrompt()" style="background: #10b981;">Send Image</button>
+            </div>
+        </div>
+        <div class="input-container">
+            <input type="text" id="message-input" placeholder="Type your message...">
+            <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageUpload()">
+            <button onclick="document.getElementById('image-input').click()">🖼️</button>
+            <button onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        function sendMessage(imageData = null) {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            if (!message && !imageData) return;
+
+            if (imageData) {
+                addMessage('user', message || 'Image uploaded', imageData);
+            } else {
+                addMessage('user', message);
+            }
+            input.value = '';
+
+            const thinkingMsg = addThinkingMessage();
+            const payload = { message: message };
+            if (imageData) payload.image = imageData;
+
+            fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                removeThinkingMessage(thinkingMsg);
+                addMessage('bot', data.response);
+            })
+            .catch(error => {
+                removeThinkingMessage(thinkingMsg);
+                addMessage('bot', 'Error: ' + error.message);
+            });
+        }
+
+        function playSound(type) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            if (type === 'send') {
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
+            } else {
+                oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(500, audioContext.currentTime + 0.1);
+            }
+            
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        function addMessage(sender, text, imageData = null) {
+            playSound(sender === 'user' ? 'send' : 'receive');
+            
+            const messages = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            
+            if (imageData) {
+                const img = document.createElement('img');
+                img.src = imageData;
+                img.style.maxWidth = '200px';
+                img.style.borderRadius = '5px';
+                div.appendChild(img);
+                if (text !== 'Image uploaded') {
+                    const textDiv = document.createElement('div');
+                    textDiv.textContent = text;
+                    div.appendChild(textDiv);
+                }
+            } else {
+                div.textContent = text;
+            }
+            
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        let selectedImageData = null;
+
+        function handleImageUpload() {
+            const fileInput = document.getElementById('image-input');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                selectedImageData = e.target.result;
+                document.getElementById('preview-img').src = selectedImageData;
+                document.getElementById('image-preview').style.display = 'block';
+                document.getElementById('message-input').placeholder = 'Add a message about this image...';
+                document.getElementById('message-input').focus();
+            };
+            reader.readAsDataURL(file);
+            fileInput.value = '';
+        }
+
+        function cancelImage() {
+            selectedImageData = null;
+            document.getElementById('image-preview').style.display = 'none';
+            document.getElementById('message-input').placeholder = 'Type your message...';
+        }
+
+        function addThinkingMessage() {
+            const messages = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'message bot thinking';
+            div.innerHTML = '<span class="dots">thinking<span>.</span><span>.</span><span>.</span></span>';
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            return div;
+        }
+
+        function removeThinkingMessage(thinkingMsg) {
+            if (thinkingMsg && thinkingMsg.parentNode) {
+                thinkingMsg.parentNode.removeChild(thinkingMsg);
+            }
+        }
+
+        function sendImageWithPrompt() {
+            const message = document.getElementById('message-input').value.trim() || 'What do you see in this image?';
+            sendMessage(selectedImageData);
+            cancelImage();
+        }
+
+        document.getElementById('message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
