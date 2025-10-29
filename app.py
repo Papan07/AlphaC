@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 import os
 import base64
@@ -9,7 +9,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configure Gemini
-gemini_client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
 # Optimized for speed
 
@@ -43,10 +43,8 @@ def chat():
         model = "gemini-2.5-flash"
     
     # Generate bot response
-    response = gemini_client.models.generate_content(
-        model=model,
-        contents=contents
-    )
+    model_instance = genai.GenerativeModel(model)
+    response = model_instance.generate_content(contents)
     
     return jsonify({'response': response.candidates[0].content.parts[0].text})
 
